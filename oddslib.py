@@ -23,6 +23,11 @@ NAME_TABLE_NFL = {
 		'HOU': 	'Houston Texans',
 		'IND':	'Indianapolis Colts',
 		'LA':	'LA Rams',
+		'LAC':	'LA Chargers',
+		'Los Angeles Rams':	'LA Rams',
+		'Los Angeles Chargers': 'LA Chargers',
+		'DEN':	'Denver Broncos',
+		'LA':	'LA Rams',
 		'SEA':	'Seattle Seahawks',
 		'GB':	'Green Bay Packers',
 		'CAR':	'Carolina Panthers',
@@ -55,7 +60,27 @@ class Line(object):
 	def __init__(self, kind, value, odds=''):
 		self.kind = kind
 		self.value = value
-		self.odds = odds.lower()
+		self.odds = odds
+
+		if not isinstance(self.value, str):
+			pos = ''
+			if sign(self.value) == 1:
+				pos = '+'
+
+			if self.value.is_integer():
+				self.value = int(self.value)
+
+			self.value = pos + str(self.value)
+
+		if not isinstance(self.odds, str):
+			pos = ''
+			if sign(self.odds) == 1:
+				pos = '+'
+
+			if self.odds.is_integer():
+				self.odds = int(self.odds)
+
+			self.odds = pos + str(self.odds)
 
 	def __repr__(self):
 		s = ''
@@ -98,6 +123,8 @@ class Matchup(object):
 		self.spread_two = kwargs['spread_two']
 		self.over = kwargs['over']
 		self.under = kwargs['under']
+		self.offset1 = ''
+		self.offset2 = ''
 
 		if sport == 'nfl':
 			for key, value in NAME_TABLE_NFL.items():
@@ -107,19 +134,84 @@ class Matchup(object):
 					self.team_two = NAME_TABLE_NFL[self.team_two]
 
 	def __repr__(self):
-		line_one = self.team_one + '  '
-		line_two = self.team_two + '  '
+		l1 = [self.team_one, str(self.spread_one), str(self.mline_one), str(self.over)]
+		l2 = [self.team_two, str(self.spread_two), str(self.mline_two), str(self.under)]
 
-		diff = len(self.team_one) - len(self.team_two)
+		line_one = ''
+		line_two = ''
 
-		if diff > 0:
-			line_two += ' ' * diff
-		if diff < 0:
-			diff *= -1
-			line_one += ' ' * diff 
+		for i in range(0, 4):
+			elt_one = l1[i]
+			elt_two = l2[i]
 
-		line_one += '  '.join([str(self.spread_one), str(self.mline_one), str( self.over)])
-		line_two += '  '.join([str(self.spread_two), str(self.mline_two), str(self.under)])
+			diff = len(elt_one) - len(elt_two)
+
+			if diff > 0:
+				elt_two += ' ' * diff
+			if diff < 0:
+				diff *= -1
+				elt_one += ' ' * diff 
+
+			line_one += elt_one + '  '
+			line_two += elt_two + '  '
+
+			if i == 0 and self.offset != '':
+				line_one += self.offset
+				line_two += self.offset
 
 		return self.website + '\n' + line_one + '\n' + line_two + '\n'
 
+	def get_key(self):
+		ls = sorted([self.team_one, self.team_two], key=lambda s: str.lower(s))
+		key = ls[0][:3] + ls[1][3]
+
+		return key
+
+def sign(num):
+	if num < 0:
+		return -1
+	return 1
+
+def add_spreads(spread_one, spread_two):
+	
+	val = spread_one[0] + spread_two[0]
+
+	if spread_one[0] != 0.0 and spread_two[0] != 0.0:
+		val /= 2
+
+	odds = None
+
+	if sign(spread_one[1]) == sign(spread_two[1]):
+		odds = (spread_one[1] + spread_two[1])/2
+		return [val, odds]
+
+	if abs(spread_one[1]) == abs(spread_two[1]):
+		odds = 100.0
+		return [val, odds]
+
+	higher = max(abs(spread_one[1]), abs(spread_two[1]))
+
+	odds = ((abs(spread_one[1] + spread_two[1]) + 200) * sign(higher))/2
+	return [val, odds]
+
+def add_mlines(mline_one, mline_two):
+	odds = None
+
+	if mline_one[0] == 0:
+		odds = mline_two[0]
+		return [odds, 100.0]
+	if mline_two[0] == 0:
+		odds = mline_one[0]
+		return [odds, 100.0]
+
+	if sign(mline_one[0]) == sign(mline_two[0]):
+		odds = (mline_one[0] + mline_two[0])/2
+		return [odds, 100.0]
+
+	if abs(mline_one[0]) == abs(mline_two[0]):
+		return [odds, 100.0]
+
+	higher = max(abs(mline_one[0]), abs(mline_two[0]))
+
+	odds = ((abs(mline_one[0] + mline_two[0]) + 200) * sign(higher))/2
+	return [odds, 100.0]

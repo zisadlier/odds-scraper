@@ -1,7 +1,7 @@
 import urllib2
 import requests
 import time
-from oddslib import Line, Matchup, WEBSITES
+from oddslib import *
 
 from bs4 import BeautifulSoup
 from selenium import webdriver
@@ -11,8 +11,15 @@ from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.keys import Keys
 
+# Get a matchup list from a specified website and sport
 def scrape(website, category):
 	url = WEBSITES[website][category]
+
+	if website not in WEBSITES.keys():
+		print 'Invalid website'
+	else:
+		if category not in WEBSITES[website].keys():
+			print 'Invalid category'
 
 	if website == 'sportsbook':
 		return get_matchups_sportsbook(url, 'lxml', category)
@@ -73,17 +80,9 @@ def get_matchups_sportsbook(url, parse_type, sport):
 		t2 = ls[4]
 
 		temp = ls[2]
-		#s1 = None
-		#if temp == ' -':
-		#	s1 = Line('S', temp)
-		#else:
 		s1 = Line('S', temp[:temp.find('(')], temp[temp.find('(')+1:temp.find(')')])
 
 		temp = ls[6]
-		#s2 = None
-		#if temp == ' -':
-		#	s2  = Line('S', temp)
-		#else:
 		s2 = Line('S', temp[:temp.find('(')], temp[temp.find('(')+1:temp.find(')')])
 
 		temp = ls[3]
@@ -106,10 +105,11 @@ def get_matchups_sportsbook(url, parse_type, sport):
 		else:
 			u = Line('U', temp[2:temp.find('(')], temp[temp.find('(')+1:temp.find(')')])
 
-		matchup = Matchup(sport, 'Betus', team_one=t1, team_two=t2, spread_one=s1, spread_two=s2,
+		matchup = Matchup(sport, 'Sportsbook', team_one=t1, team_two=t2, spread_one=s1, spread_two=s2,
 	        		      mline_one=m1, mline_two=m2, over=o, under=u)
 
 		matchups.append(matchup)
+
 
 	return matchups
 
@@ -164,12 +164,12 @@ def get_matchups_betus(url, parse_type, sport):
 		temp2 = ls[5]
 		u = Line('U', temp.replace('?', '.5'), temp2)
 
-		matchup = Matchup(sport, 'Sportsbook', team_one=t1, team_two=t2, spread_one=s1, spread_two=s2,
+		matchup = Matchup(sport, 'Betus', team_one=t1, team_two=t2, spread_one=s1, spread_two=s2,
 	        		      mline_one=m1, mline_two=m2, over=o, under=u)
 
 		matchups.append(matchup)
 
-	return matchups
+	return matchups #sorted(matchups, key=lambda matchup: str.lower(matchup.team_one[:3] + matchup.team_two[:3]))
 
 
 # Parse lines from a page on bovada.lv
@@ -215,13 +215,13 @@ def get_matchups_bovada(url, parse_type, sport):
 
 	return matchups
 
-
-def get_worst_matchups(matchups, metric):
+# Finds the most lopsided matchups of a set by either spread or money line
+def get_worst_matchups(matchups, metric='spread'):
 	largest_diff = 0
 	worst_matchups = []
 
 	for matchup in matchups:
-		if metric == 1:
+		if metric == 'spread':
 			spread = abs(matchup.spread_one.get_numerical_value())
 			if largest_diff < spread:
 				largest_diff = spread
@@ -230,7 +230,7 @@ def get_worst_matchups(matchups, metric):
 			elif largest_diff == spread:
 				worst_matchups.append(matchup)
 
-		if metric == 2:
+		if metric == 'mline':
 			mline_diff = abs(matchup.mline_one.get_numerical_value()) + abs(matchup.mline_two.get_numerical_value())
 			if largest_diff < mline_diff:
 				largest_diff = mline_diff
@@ -239,29 +239,80 @@ def get_worst_matchups(matchups, metric):
 			elif largest_diff == mline_diff:
 				worst_matchups.append(matchup)
 
-	print_nice(worst_matchups)
+	return worst_matchups
 
+# Takes in a list of matchup lists and returns one list containing the average lines for every
+# matchup appearing it at least one of the lists
+def average_lines(matchup_lists):
+	template = ['', '', [], [], [], [], [], []]
+	average_matchups = {}
+	final_matchups = []
+
+	sport = matchup_lists[0][0].sport
+
+	for matchups in matchup_lists:
+		for matchup in matchups:
+			key = matchup.get_key()
+			if key not in average_matchups.keys():
+				average_matchups[key] = template[:]
+				average_matchups[key][0] = matchup.team_one 
+				average_matchups[key][1] = matchup.team_two 
+				average_matchups[key][2] = [matchup.spread_one.get_numerical_value(), matchup.spread_one.get_numerical_odds()]
+				average_matchups[key][3] = [matchup.spread_two.get_numerical_value(), matchup.spread_two.get_numerical_odds()]
+				average_matchups[key][4] = [matchup.mline_one.get_numerical_value(), matchup.mline_one.get_numerical_odds()]
+				average_matchups[key][5] = [matchup.mline_two.get_numerical_value(), matchup.mline_two.get_numerical_odds()]
+				average_matchups[key][6] = [matchup.over.get_numerical_value(), matchup.over.get_numerical_odds()]
+				average_matchups[key][7] = [matchup.under.get_numerical_value(), matchup.under.get_numerical_odds()]
+				#average_matchups[key][8] = 1
+			else:
+				average_matchups[key][2] = add_spreads(average_matchups[key][2], [matchup.spread_one.get_numerical_value(), matchup.spread_one.get_numerical_odds()])
+				average_matchups[key][3] = add_spreads(average_matchups[key][3], [matchup.spread_two.get_numerical_value(), matchup.spread_two.get_numerical_odds()])
+				average_matchups[key][4] = add_mlines(average_matchups[key][4], [matchup.mline_one.get_numerical_value(), matchup.mline_one.get_numerical_odds()])
+				average_matchups[key][5] = add_mlines(average_matchups[key][5], [matchup.mline_two.get_numerical_value(), matchup.mline_two.get_numerical_odds()])
+				average_matchups[key][6] = add_spreads(average_matchups[key][6], [matchup.over.get_numerical_value(), matchup.over.get_numerical_odds()])
+				average_matchups[key][7] = add_spreads(average_matchups[key][7], [matchup.under.get_numerical_value(), matchup.under.get_numerical_odds()])
+				#average_matchups[key][8] += 1
+
+	for key, ls in average_matchups.iteritems():
+		t1 = ls[0]
+		t2 = ls[1]
+
+		s1 = Line('S', ls[2][0], ls[2][1])
+		s2 = Line('S', ls[3][0], ls[3][1])
+
+		m1 = Line('M', ls[4][0])
+		m2 = Line('M', ls[5][0])
+
+		o = Line('O', ls[6][0], ls[6][1])
+		u = Line('U', ls[7][0], ls[7][1])
+
+		matchup = Matchup(sport, 'Average', team_one=t1, team_two=t2, spread_one=s1, spread_two=s2,
+	        		      mline_one=m1, mline_two=m2, over=o, under=u)
+		final_matchups.append(matchup)
+
+	return final_matchups
+
+
+# Prints out a list of matchups in a readable format
 def print_nice(matchups):
+	longest_name_length = 0
 	for matchup in matchups:
-		print '----------------------------------------------------------'
-		print matchup
+		if len(matchup.team_one) > longest_name_length:
+			longest_name_length = len(matchup.team_one)
+		if len(matchup.team_two) > longest_name_length:
+			longest_name_length = len(matchup.team_two)
 
+	for matchup in matchups:
+		longer_name_length = max(len(matchup.team_one), len(matchup.team_two))
+		matchup.offset = (longest_name_length - longer_name_length) * ' '
+		print('----------------------------------------------------------')
+		print(matchup)
 
 
 '''
-s1 = Line('S', '-1.5', '+125')
-m1 = Line('M', '-127',)
-o = Line('O', '8.5', '-115')
-s2 = Line('S', '+1.5', '-145')
-m2 = Line('M', '+117',)
-u = Line('U', '8.5', '-105')
-
-M = Matchup('Baseball', 'Sportsbook', team_one='Toronto Blue Jays', team_two='Oakland', spread_one=s1, spread_two=s2,
-	         mline_one=m1, mline_two=m2, over=o, under=u)
-
-matchups = get_matchups_sportsbook('https://www.sportsbook.ag/sbk/sportsbook4/baseball-betting/mlb-lines.sbk', 'lxml', 'Baseball')
-
-matchups2 = get_matchups_betus('http://www.betus.com.pa/sportsbook/nfl-football-lines.aspx', 'lxml', 'Football')
-
-matchups3 = get_matchups_bovada('https://sports.bovada.lv/football/nfl/game-lines-market-group', 'lxml', 'Football')
+m = scrape('betus', 'nfl')
+m2 = scrape('sportsbook', 'nfl')
+m3 = scrape('bovada', 'nfl')
+mm = [m, m2, m3]
+av = average_lines(mm)
 '''
