@@ -123,8 +123,7 @@ class Matchup(object):
 		self.spread_two = kwargs['spread_two']
 		self.over = kwargs['over']
 		self.under = kwargs['under']
-		self.offset1 = ''
-		self.offset2 = ''
+		self.offset = ''
 
 		if sport == 'nfl':
 			for key, value in NAME_TABLE_NFL.items():

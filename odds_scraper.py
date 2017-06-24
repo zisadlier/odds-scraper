@@ -2,6 +2,7 @@ import urllib2
 import requests
 import time
 from oddslib import *
+from params import *
 
 from bs4 import BeautifulSoup
 from selenium import webdriver
@@ -36,7 +37,7 @@ def make_soup_basic(url, parse_type):
 
 	return soup
 
-def make_soup_bovada(url, parse_type, chrome_path='C:/Python27/MyStuff/chromedriver.exe'):
+def make_soup_bovada(url, parse_type):
 	options = webdriver.ChromeOptions()
 	options.add_argument('headless')
 
