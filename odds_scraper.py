@@ -1,4 +1,3 @@
-import urllib2
 import requests
 import time
 from oddslib import *
@@ -14,20 +13,25 @@ from selenium.webdriver.common.keys import Keys
 
 # Get a matchup list from a specified website and sport
 def scrape(website, category):
+	if website not in WEBSITES.keys():
+		raise Exception('Invalid website')
+	if category not in WEBSITES[website].keys():
+		raise Exception('Invalid category')
+
 	url = WEBSITES[website][category]
 
-	if website not in WEBSITES.keys():
-		print 'Invalid website'
-	else:
-		if category not in WEBSITES[website].keys():
-			print 'Invalid category'
-
 	if website == 'sportsbook':
-		return get_matchups_sportsbook(url, 'lxml', category)
-	if website == 'betus':
-		return get_matchups_betus(url, 'lxml', category)
-	if website == 'bovada':
-		return get_matchups_bovada(url, 'lxml', category)
+		return get_matchups_sportsbook(url, 'html.parser', category)
+	elif website == 'betus':
+		return get_matchups_betus(url, 'html.parser', category)
+	elif website == 'bovada':
+		return get_matchups_bovada(url, 'html.parser', category)
+	elif website == 'sportsbetting':
+		return get_matchups_sportsbetting(url, 'html.parser', category)
+	elif website == 'betlucky':
+		return get_matchups_betlucky(url, 'html.parser', category)
+	elif website == 'gtbets':
+		return get_matchups_gtbets(url, 'html.parser', category)
 
 	return None
 
@@ -37,15 +41,21 @@ def make_soup_basic(url, parse_type):
 
 	return soup
 
-def make_soup_bovada(url, parse_type):
+def get_chrome_browser():
 	options = webdriver.ChromeOptions()
 	options.add_argument('headless')
 
 	browser = webdriver.Chrome(chrome_path, chrome_options=options)
+
+	return browser
+
+def make_soup_bovada(url, parse_type):
+	xpath_body = "/html/body"
+
+	browser = get_chrome_browser()
 	browser.get(url)
 
-
-	body = browser.find_element_by_xpath('/html/body')
+	body = browser.find_element_by_xpath(xpath_body)
 	body.send_keys(Keys.PAGE_DOWN)
 
 	for i in range (0, 10):
@@ -61,6 +71,47 @@ def make_soup_bovada(url, parse_type):
 	soup = BeautifulSoup(html, parse_type)
 
 	return soup
+
+def make_soup_sportsbetting(url, parse_type, sport):
+	selector_tb = "tbody.event"
+	xpath_body = "/html/body"
+
+	selector_sport = SB_HTML_TOOLS[sport][0]
+	xpath_sport = SB_HTML_TOOLS[sport][1]
+
+	browser = get_chrome_browser()
+	browser.get(url)
+	body = browser.find_element_by_xpath(xpath_body)
+
+	WebDriverWait(browser, 10).until(EC.visibility_of_element_located((By.CSS_SELECTOR, selector_sport)))
+	browser.find_element_by_css_selector(selector_sport).click()
+
+	WebDriverWait(browser, 10).until(EC.visibility_of_element_located((By.XPATH, xpath_sport)))
+	browser.find_element_by_xpath(xpath_sport).click()
+	time.sleep(1)
+
+	WebDriverWait(browser, 10).until(EC.visibility_of_any_elements_located((By.CSS_SELECTOR, selector_tb)))
+	html = browser.page_source
+	browser.quit()
+
+	soup = BeautifulSoup(html, parse_type)
+
+	return soup
+
+def make_soup_gtbets(url, parse_type):
+	selector = 'tbody.wagering-events'
+
+	browser = get_chrome_browser()
+	browser.get(url)
+
+	WebDriverWait(browser, 10).until(EC.visibility_of_any_elements_located((By.CSS_SELECTOR, selector)))
+	html = browser.page_source
+	browser.quit()
+
+	soup = BeautifulSoup(html, parse_type)
+
+	return soup
+
 
 # Parse lines from a page on sportsbook.ag 
 def get_matchups_sportsbook(url, parse_type, sport):
@@ -216,6 +267,146 @@ def get_matchups_bovada(url, parse_type, sport):
 
 	return matchups
 
+def get_matchups_sportsbetting(url, parse_type, sport):
+	soup = make_soup_sportsbetting(url, parse_type, sport)
+
+	elements = soup.find_all('tbody', class_='event')
+	matchups = []
+
+	for element in elements:
+		ls = element.get_text().split('\n')
+		ls = [item.encode('ascii', 'replace') for item in ls]
+		ls = filter(lambda x: x != '' and x != 'o', ls)
+		ls = [item.strip() for item in ls]
+		ls = ls[2:]
+		if ls == []:
+			continue
+
+		t1 = ls[0]
+		t2 = ls[9]
+
+		s1 = Line('S', ls[2].replace('?', '.5'), ls[3])
+		s2 = Line('S', ls[11].replace('?', '.5'), ls[12])
+
+		if ls[4] == '':
+			ls[4] = '-'
+		m1 = Line('M', ls[4])
+
+		if ls[13] == '':
+			ls[13] = '-'
+		m2 = Line('M', ls[13])
+
+		o = Line('O',ls[6].replace('?', '.5'), ls[7])
+		u = Line('U',ls[15].replace('?', '.5'), ls[16])
+
+		matchup = Matchup(sport, 'Sportsbetting', team_one=t1, team_two=t2, spread_one=s1, spread_two=s2,
+	        		      mline_one=m1, mline_two=m2, over=o, under=u)
+
+		matchups.append(matchup)
+
+	return matchups
+
+def get_matchups_betlucky(url, parse_type, sport):
+	soup = make_soup_basic(url, parse_type)
+
+	elements = soup.find_all('tr')
+	matchups = []
+	disregard = ['Display:', 'Team']
+	i = 0
+
+	while(i < len(elements) - 1):
+		ls = elements[i].get_text().split('\n')
+		ls = [s.strip() for s in ls]
+		ls = [item.encode('ascii', 'replace') for item in ls]
+		ls = filter(lambda x: x != '', ls)
+		if len(ls) < 2 or ls[0] in disregard:
+			i += 1
+			continue
+		if ls[0][0].isdigit():
+			ls = ls[1:]
+
+		if ls[3][0] == 'O':
+			ls.insert(3, '-')
+
+		ls2 = elements[i + 1].get_text().split('\n')
+		ls2 = [s.strip() for s in ls2]
+		ls2 = [item.encode('ascii', 'replace') for item in ls2]
+		ls2 = filter(lambda x: x != '', ls2)
+		if len(ls2) < 2 or ls2[0] in disregard:
+			i += 1
+			continue
+		if ls2[0][0].isdigit():
+			ls2 = ls2[1:]
+
+		if ls2[3][0] == 'U':
+			ls2.insert(3, '-')
+
+		t1 = ls[0]
+		t2 = ls2[0]
+
+		s1 = Line('S', ls[1].replace('?', '.5'), ls[2])
+		s2 = Line('S', ls2[1].replace('?', '.5'), ls2[2])
+
+		m1 = Line('M', ls[3])
+		m2 = Line('M', ls2[3])
+
+		o = Line('O',ls[4][1:].replace('?', '.5'), ls[5])
+		u = Line('U',ls2[4][1:].replace('?', '.5'), ls2[5])
+
+		matchup = Matchup(sport, 'Betlucky', team_one=t1, team_two=t2, spread_one=s1, spread_two=s2,
+	        		      mline_one=m1, mline_two=m2, over=o, under=u)
+
+		matchups.append(matchup)
+
+		i += 2
+
+	return matchups
+
+def get_matchups_gtbets(url, parse_type, sport):	
+	soup = make_soup_gtbets(url, parse_type)
+
+	elements = soup.find_all('tbody', class_='wagering-events')
+	matchups = []
+
+	for element in elements:
+		ls = element.get_text().split('\n')
+		ls = [item.encode('ascii', 'replace') for item in ls]
+		ls = filter(lambda x: x != '', ls)
+		ls = [item.strip() for item in ls]
+		ls = ls[1:]
+
+		t1 = ls[0]
+		t2 = ls[5]
+
+		temp = ls[1]
+		s1 = Line('S', temp[:temp.find('(')], temp[temp.find('(')+1:temp.find(')')])
+
+		temp = ls[6]
+		s2 = Line('S', temp[:temp.find('(')], temp[temp.find('(')+1:temp.find(')')])
+
+		m1 = Line('M', ls[2])
+		m2 = Line('M', ls[7])
+
+		temp = ls[3]
+		if temp == '-':
+			o = Line('O', temp, '')
+		else:
+			o = Line('O', temp[2:temp.find('(')], temp[temp.find('(')+1:temp.find(')')])
+
+		temp = ls[8]
+		if temp == '-':
+			u = Line('U', temp, '')
+		else:
+			u = Line('U', temp[2:temp.find('(')], temp[temp.find('(')+1:temp.find(')')])
+
+		matchup = Matchup(sport, 'GTBets', team_one=t1, team_two=t2, spread_one=s1, spread_two=s2,
+	        		      mline_one=m1, mline_two=m2, over=o, under=u)
+
+		matchups.append(matchup)
+
+	return matchups
+
+
 # Finds the most lopsided matchups of a set by either spread or money line
 def get_worst_matchups(matchups, metric='spread'):
 	largest_diff = 0
@@ -244,7 +435,8 @@ def get_worst_matchups(matchups, metric='spread'):
 
 # Takes in a list of matchup lists and returns one list containing the average lines for every
 # matchup appearing it at least one of the lists
-def average_lines(matchup_lists):
+def average_lines(matchup_lists, round=2):
+	decimal = '{0:.' + str(round) + 'f}'
 	template = ['', '', [], [], [], [], [], []]
 	average_matchups = {}
 	final_matchups = []
@@ -264,15 +456,13 @@ def average_lines(matchup_lists):
 				average_matchups[key][5] = [matchup.mline_two.get_numerical_value(), matchup.mline_two.get_numerical_odds()]
 				average_matchups[key][6] = [matchup.over.get_numerical_value(), matchup.over.get_numerical_odds()]
 				average_matchups[key][7] = [matchup.under.get_numerical_value(), matchup.under.get_numerical_odds()]
-				#average_matchups[key][8] = 1
 			else:
-				average_matchups[key][2] = add_spreads(average_matchups[key][2], [matchup.spread_one.get_numerical_value(), matchup.spread_one.get_numerical_odds()])
-				average_matchups[key][3] = add_spreads(average_matchups[key][3], [matchup.spread_two.get_numerical_value(), matchup.spread_two.get_numerical_odds()])
-				average_matchups[key][4] = add_mlines(average_matchups[key][4], [matchup.mline_one.get_numerical_value(), matchup.mline_one.get_numerical_odds()])
-				average_matchups[key][5] = add_mlines(average_matchups[key][5], [matchup.mline_two.get_numerical_value(), matchup.mline_two.get_numerical_odds()])
-				average_matchups[key][6] = add_spreads(average_matchups[key][6], [matchup.over.get_numerical_value(), matchup.over.get_numerical_odds()])
-				average_matchups[key][7] = add_spreads(average_matchups[key][7], [matchup.under.get_numerical_value(), matchup.under.get_numerical_odds()])
-				#average_matchups[key][8] += 1
+				average_matchups[key][2] = add_spreads(average_matchups[key][2], [matchup.spread_one.get_numerical_value(), matchup.spread_one.get_numerical_odds()], decimal)
+				average_matchups[key][3] = add_spreads(average_matchups[key][3], [matchup.spread_two.get_numerical_value(), matchup.spread_two.get_numerical_odds()], decimal)
+				average_matchups[key][4] = add_mlines(average_matchups[key][4], [matchup.mline_one.get_numerical_value(), matchup.mline_one.get_numerical_odds()], decimal)
+				average_matchups[key][5] = add_mlines(average_matchups[key][5], [matchup.mline_two.get_numerical_value(), matchup.mline_two.get_numerical_odds()], decimal)
+				average_matchups[key][6] = add_spreads(average_matchups[key][6], [matchup.over.get_numerical_value(), matchup.over.get_numerical_odds()], decimal)
+				average_matchups[key][7] = add_spreads(average_matchups[key][7], [matchup.under.get_numerical_value(), matchup.under.get_numerical_odds()], decimal)
 
 	for key, ls in average_matchups.iteritems():
 		t1 = ls[0]
@@ -293,6 +483,47 @@ def average_lines(matchup_lists):
 
 	return final_matchups
 
+def get_deviation(matchup_one, matchup_two, metric):
+	deviation = 0
+
+	if metric == 'spread':
+		deviation = abs(abs(matchup_one.spread_one.get_numerical_value()) - abs(matchup_two.spread_one.get_numerical_value()))
+	elif metric == 'mline':
+		diff_one = abs(matchup_one.mline_one.get_numerical_value()) + abs(matchup_one.mline_two.get_numerical_value())
+		diff_two = abs(matchup_two.mline_one.get_numerical_value()) + abs(matchup_two.mline_two.get_numerical_value())
+		deviation = abs(diff_one - diff_two)
+
+	return deviation
+
+def find_largest_deviants(average_matchups, matchup_lists, metric):
+	largest_deviants = []
+	for i in range(len(average_matchups)):
+		largest_deviants.append(None)
+
+	for i, average_matchup in enumerate(average_matchups):
+		largest_dev = -1;
+		for matchups in matchup_lists:
+			for matchup in matchups:
+				if average_matchup.get_key() == matchup.get_key():
+					dev = None
+
+					if metric == 'spread':
+						dev = get_deviation(average_matchup, matchup, 'spread')
+					if metric == 'mline':
+						dev = get_deviation(average_matchup, matchup, 'mline')
+
+					if dev == largest_dev and largest_deviants[i] != None:
+						largest_deviants[i].add_website(matchup.website)
+
+					if dev > largest_dev:
+						largest_deviants[i] = matchup
+						largest_dev = dev
+
+					break
+
+	return largest_deviants
+
+
 
 # Prints out a list of matchups in a readable format
 def print_nice(matchups):
@@ -309,11 +540,94 @@ def print_nice(matchups):
 		print('----------------------------------------------------------')
 		print(matchup)
 
+def generate_html_file_matchups(matchups, file_name):
+	from yattag import Doc
+	from yattag import indent
 
-'''
-m = scrape('betus', 'nfl')
-m2 = scrape('sportsbook', 'nfl')
-m3 = scrape('bovada', 'nfl')
-mm = [m, m2, m3]
-av = average_lines(mm)
-'''
+	doc, tag, text, line = Doc().ttl()
+
+	doc.asis('<!DOCTYPE html>')
+	with tag('html'):
+		with tag('body'):
+			with tag('h1'):
+				text('Lines')
+			with tag('head'):
+				doc.stag('link', rel='stylesheet', href='style.css')
+			for matchup in matchups:
+				with tag('table'):
+					with tag('tr'):
+						line('td', matchup.website, rowspan=3, klass='site')
+						line('th', 'Team')
+						line('th', 'Spread')
+						line('th', 'Money Line')
+						line('th', 'O/U')					
+					with tag('tr'):
+						line('td', matchup.team_one)
+						line('td', matchup.spread_one.get_string())
+						line('td', matchup.mline_one.get_string())
+						line('td', matchup.over.get_string(), rowspan=2)
+					with tag('tr'):
+						line('td', matchup.team_two)
+						line('td', matchup.spread_two.get_string())
+						line('td', matchup.mline_two.get_string())
+
+	file = open(file_name, 'w')
+	file.write(indent(doc.getvalue()))
+
+
+def generate_html_file_with_deviants(average_matchups, deviant_spreads, deviant_mlines, file_name):
+	from yattag import Doc
+	from yattag import indent
+
+	doc, tag, text, line = Doc().ttl()
+
+	doc.asis('<!DOCTYPE html>')
+	with tag('html'):
+		with tag('body'):
+			with tag('h1'):
+				text('Lines and largest deviants')
+			with tag('head'):
+				doc.stag('link', rel='stylesheet', href='style.css')
+			for i, matchup in enumerate(average_matchups):
+				deviant_spread = deviant_spreads[i]
+				deviant_mline = deviant_mlines[i]
+				with tag('table'):
+					with tag('tr'):
+						with tag('td', klass='outer'):
+							with tag('table'):
+								with tag('tr'):
+									line('td', matchup.website, rowspan=3, klass='site')
+									line('th', 'Team')
+									line('th', 'Spread')
+									line('th', 'Money Line')
+									line('th', 'O/U')					
+								with tag('tr'):
+									line('td', matchup.team_one)
+									line('td', matchup.spread_one.get_string())
+									line('td', matchup.mline_one.get_string())
+									line('td', matchup.over.get_string(), rowspan=2)
+								with tag('tr'):
+									line('td', matchup.team_two)
+									line('td', matchup.spread_two.get_string())
+									line('td', matchup.mline_two.get_string())
+						with tag('td', klass='outer'):
+							with tag('table'):
+								with tag('tr'):
+									line('td', deviant_spread.website, rowspan=3, klass='site')
+									line('th', 'Spread', klass='deviant')			
+								with tag('tr'):
+									line('td', deviant_spread.spread_one.get_string())
+								with tag('tr'):
+									line('td', deviant_spread.spread_two.get_string())
+						with tag('td', klass='outer'):
+							with tag('table'):
+								with tag('tr'):
+									line('td', deviant_mline.website, rowspan=3, klass='site')
+									line('th', 'Money Line', klass='deviant')				
+								with tag('tr'):
+									line('td', deviant_mline.mline_one.get_string())
+								with tag('tr'):
+									line('td', deviant_mline.mline_two.get_string())
+
+	file = open(file_name, 'w')
+	file.write(indent(doc.getvalue()))

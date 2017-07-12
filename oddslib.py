@@ -1,47 +1,85 @@
 NEEDED_FIELDS = ['team_one', 'team_two', 'spread_one', 'spread_two', 'mline_one', 'mline_two', 'over', 'under']
-SPECIAL_VALUES = ['even', 'pk', '-', ' ', ' -', '']
+SPECIAL_VALUES = ['even', 'pk', '-', ' ', ' -', '', 'pick']
 NAME_TABLE_NFL = {
 		'KC': 	'Kansas City Chiefs',
+		'KANSAS CITY': 	'Kansas City Chiefs',
 		'NE': 	'New England Patriots',
+		'NEW ENGLAND': 	'New England Patriots',
 		'NYJ': 	'New York Jets',
+		'NY JETS': 	'New York Jets',
 		'BUF':	'Buffalo Bills',
+		'BUFFALO':	'Buffalo Bills',
 		'ATL':	'Atlanta Falcons',
+		'ATLANTA':	'Atlanta Falcons',
 		'CHI': 	'Chicago Bears',
+		'CHICAGO': 	'Chicago Bears',
 		'PHI':	'Philadelphia Eagles',
+		'PHILADELPHIA':	'Philadelphia Eagles',
 		'WAS':	'Washington Redskins',
+		'WASHINGTON':	'Washington Redskins',
 		'PIT':	'Pittsburgh Steelers',
+		'PITTSBURGH':	'Pittsburgh Steelers',
 		'CLE':	'Cleveland Browns',
+		'CLEVELAND':	'Cleveland Browns',
 		'BAL':	'Baltimore Ravens',
+		'BALTIMORE':	'Baltimore Ravens',
 		'CIN':	'Cincinnati Bengals',
+		'CINCINNATI':	'Cincinnati Bengals',
 		'ARI':	'Arizona Cardinals',
+		'ARIZONA':	'Arizona Cardinals',
 		'DET':	'Detroit Lions',
+		'DETROIT':	'Detroit Lions',
 		'TB':	'Tampa Bay Buccaneers',
+		'TAMPA BAY':	'Tampa Bay Buccaneers',
 		'MIA':	'Miami Dolphins',
+		'MIAMI':	'Miami Dolphins',
 		'OAK':	'Oakland Raiders',
+		'OAKLAND':	'Oakland Raiders',
 		'TEN':	'Tennessee Titans',
+		'TENNESSEE':	'Tennessee Titans',
 		'JAX':	'Jacksonville Jaguars',
+		'JACKSONVILLE':	'Jacksonville Jaguars',
 		'HOU': 	'Houston Texans',
+		'HOUSTON': 	'Houston Texans',
 		'IND':	'Indianapolis Colts',
+		'INDIANAPOLIS':	'Indianapolis Colts',
 		'LA':	'LA Rams',
+		'LA RAMS':	'LA Rams',
 		'LAC':	'LA Chargers',
+		'LA CHARGERS':	'LA Chargers',
 		'Los Angeles Rams':	'LA Rams',
 		'Los Angeles Chargers': 'LA Chargers',
 		'DEN':	'Denver Broncos',
-		'LA':	'LA Rams',
+		'DENVER':	'Denver Broncos',
 		'SEA':	'Seattle Seahawks',
+		'SEATTLE':	'Seattle Seahawks',
 		'GB':	'Green Bay Packers',
+		'GREEN BAY':	'Green Bay Packers',
 		'CAR':	'Carolina Panthers',
+		'CAROLINA':	'Carolina Panthers',
 		'SF': 	'San Francisco 49ers',
+		'SAN FRANCISCO': 	'San Francisco 49ers',
 		'NYG':	'New York Giants',
+		'NY GIANTS':	'New York Giants',
 		'DAL':	'Dallas Cowboys',
+		'DALLAS':	'Dallas Cowboys',
 		'NO':	'New Orleans Saints',
+		'NEW ORLEANS':	'New Orleans Saints',
 		'MIN':	'Minnesota Vikings',
+		'MINNESOTA':	'Minnesota Vikings',
 }
+
+SB_HTML_TOOLS = {}
+SB_HTML_TOOLS['nfl'] = ["img[src*='football']", "//a[text()='NFL']"]
+SB_HTML_TOOLS['ncaaf'] = ["img[src*='football']", "//a[text()='NCAA']"]
 
 WEBSITES = {}
 WEBSITES['bovada'] = {}
 WEBSITES['betus'] = {}
 WEBSITES['sportsbook'] = {}
+WEBSITES['sportsbetting'] = {}
+WEBSITES['betlucky'] = {}
+WEBSITES['gtbets'] = {}
 
 WEBSITES['bovada']['nfl'] = 'https://sports.bovada.lv/football/nfl/game-lines-market-group'
 WEBSITES['bovada']['nba'] = 'https://sports.bovada.lv/baketball/nba/game-lines-market-group'
@@ -49,12 +87,19 @@ WEBSITES['bovada']['nba'] = 'https://sports.bovada.lv/baketball/nba/game-lines-m
 WEBSITES['betus']['nba'] = 'http://www.betus.com.pa/sportsbook/nba-basketball-lines.aspx'
 WEBSITES['betus']['nfl'] = 'http://www.betus.com.pa/sportsbook/nfl-football-lines.aspx' 
 
-WEBSITES['sportsbook']['mlb'] = 'https://www.sportsbook.ag/sbk/sportsbook4/baseball-betting/mlb-lines.sbk'
+#WEBSITES['sportsbook']['mlb'] = 'https://www.sportsbook.ag/sbk/sportsbook4/baseball-betting/mlb-lines.sbk'
 WEBSITES['sportsbook']['nba'] = 'https://www.sportsbook.ag/sbk/sportsbook4/nba-finals-betting/game-lines.sbk'
 WEBSITES['sportsbook']['nfl'] = 'https://www.sportsbook.ag/sbk/sportsbook4/nfl-betting/game-lines.sbk'
 WEBSITES['sportsbook']['ncaaf'] = 'https://www.sportsbook.ag/sbk/sportsbook4/ncaa-football-betting/game-lines.sbk'
 
+WEBSITES['sportsbetting']['nfl'] = 'https://www.sportsbetting.ag/sportsbook'
+WEBSITES['sportsbetting']['ncaaf'] = 'https://www.sportsbetting.ag/sportsbook'
+WEBSITES['sportsbetting']['nba'] = 'https://www.sportsbetting.ag/sportsbook'
 
+WEBSITES['betlucky']['nfl'] = 'http://betluckys.ag/sports?curOption=FOOTBALL/*/NFL/*/'
+
+WEBSITES['gtbets']['nfl'] = 'https://www.gtbets.eu/wagering1.asp?mode=lines&league=NFL&lg=1'
+WEBSITES['gtbets']['ncaaf'] = 'https://www.gtbets.eu/wagering1.asp?mode=lines&league=CF&lg=1'
 
 class Line(object):
 	def __init__(self, kind, value, odds=''):
@@ -62,13 +107,18 @@ class Line(object):
 		self.value = value
 		self.odds = odds
 
+		# Insert a '+'' if the value is positive but does not already have a '+'
+		if isinstance(self.value, str) and self.value.lower() not in SPECIAL_VALUES:
+			if sign(float(self.value)) == 1 and self.value[0] != '+':
+				self.value = '+' + self.value
+
 		if not isinstance(self.value, str):
 			pos = ''
 			if sign(self.value) == 1:
 				pos = '+'
 
 			if self.value.is_integer():
-				self.value = int(self.value)
+				self.value = str(self.value)
 
 			self.value = pos + str(self.value)
 
@@ -95,16 +145,26 @@ class Line(object):
 		return s
 
 	def get_numerical_value(self):
-		if self.value in SPECIAL_VALUES:
+		if self.value.lower() in SPECIAL_VALUES:
 			return 0.0
 		else:
 			return float(self.value)
 
 	def get_numerical_odds(self):
-		if self.odds in SPECIAL_VALUES:
+		if self.odds.lower() in SPECIAL_VALUES:
 			return 100.0
 		else:
 			return float(self.odds)
+
+	def get_string(self):
+		if self.odds != '':
+			if self.value == '+0.0':
+				self.value = 'Even'
+			return self.value + ' ' + '(' + self.odds + ')'
+		if self.odds == '' and self.value == '+0.0':
+			return '-'
+		if self.odds == '':
+			return self.value
 
 
 class Matchup(object):
@@ -166,51 +226,53 @@ class Matchup(object):
 
 		return key
 
+	def add_website(self, website):
+		self.website += (', ' + website)
+
 def sign(num):
 	if num < 0:
 		return -1
 	return 1
 
-def add_spreads(spread_one, spread_two):
+def add_spreads(spread_one, spread_two, decimal):
 	
 	val = spread_one[0] + spread_two[0]
 
-	if spread_one[0] != 0.0 and spread_two[0] != 0.0:
-		val /= 2
+	val /= 2
 
 	odds = None
 
 	if sign(spread_one[1]) == sign(spread_two[1]):
 		odds = (spread_one[1] + spread_two[1])/2
-		return [val, odds]
+		return [float(decimal.format(val)), float(decimal.format(odds))]
 
 	if abs(spread_one[1]) == abs(spread_two[1]):
 		odds = 100.0
-		return [val, odds]
+		return [float(decimal.format(val)), float(decimal.format(odds))]
 
 	higher = max(abs(spread_one[1]), abs(spread_two[1]))
 
 	odds = ((abs(spread_one[1] + spread_two[1]) + 200) * sign(higher))/2
-	return [val, odds]
+	return [float(decimal.format(val)), float(decimal.format(odds))]
 
-def add_mlines(mline_one, mline_two):
+def add_mlines(mline_one, mline_two, decimal):
 	odds = None
 
 	if mline_one[0] == 0:
 		odds = mline_two[0]
-		return [odds, 100.0]
+		return [float(decimal.format(odds)), 100.0]
 	if mline_two[0] == 0:
 		odds = mline_one[0]
-		return [odds, 100.0]
+		return [float(decimal.format(odds)), 100.0]
 
 	if sign(mline_one[0]) == sign(mline_two[0]):
 		odds = (mline_one[0] + mline_two[0])/2
-		return [odds, 100.0]
+		return [float(decimal.format(odds)), 100.0]
 
 	if abs(mline_one[0]) == abs(mline_two[0]):
-		return [odds, 100.0]
+		return [float(decimal.format(odds)), 100.0]
 
 	higher = max(abs(mline_one[0]), abs(mline_two[0]))
 
 	odds = ((abs(mline_one[0] + mline_two[0]) + 200) * sign(higher))/2
-	return [odds, 100.0]
+	return [float(decimal.format(odds)), 100.0]
