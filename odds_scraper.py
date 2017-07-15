@@ -1,5 +1,6 @@
 import requests
 import time
+import copy
 from oddslib import *
 from params import *
 
@@ -10,6 +11,8 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.keys import Keys
+
+from pyvirtualdisplay import Display
 
 # Get a matchup list from a specified website and sport
 def scrape(website, category):
@@ -49,10 +52,20 @@ def get_chrome_browser():
 
 	return browser
 
+def get_firefox_browser():
+	caps = DesiredCapabilities().FIREFOX
+	caps["marionette"] = False
+
+	browser = webdriver.Firefox(capabilities=caps)
+
+	return browser
+	
+
+
 def make_soup_bovada(url, parse_type):
 	xpath_body = "/html/body"
 
-	browser = get_chrome_browser()
+	browser = get_firefox_browser()
 	browser.get(url)
 
 	body = browser.find_element_by_xpath(xpath_body)
@@ -79,7 +92,7 @@ def make_soup_sportsbetting(url, parse_type, sport):
 	selector_sport = SB_HTML_TOOLS[sport][0]
 	xpath_sport = SB_HTML_TOOLS[sport][1]
 
-	browser = get_chrome_browser()
+	browser = get_firefox_browser()
 	browser.get(url)
 	body = browser.find_element_by_xpath(xpath_body)
 
@@ -92,7 +105,6 @@ def make_soup_sportsbetting(url, parse_type, sport):
 
 	WebDriverWait(browser, 10).until(EC.visibility_of_any_elements_located((By.CSS_SELECTOR, selector_tb)))
 	html = browser.page_source
-	browser.quit()
 
 	soup = BeautifulSoup(html, parse_type)
 
@@ -101,7 +113,7 @@ def make_soup_sportsbetting(url, parse_type, sport):
 def make_soup_gtbets(url, parse_type):
 	selector = 'tbody.wagering-events'
 
-	browser = get_chrome_browser()
+	browser = get_firefox_browser()
 	browser.get(url)
 
 	WebDriverWait(browser, 10).until(EC.visibility_of_any_elements_located((By.CSS_SELECTOR, selector)))
@@ -516,7 +528,7 @@ def find_largest_deviants(average_matchups, matchup_lists, metric):
 						largest_deviants[i].add_website(matchup.website)
 
 					if dev > largest_dev:
-						largest_deviants[i] = matchup
+						largest_deviants[i] = copy.deepcopy(matchup)
 						largest_dev = dev
 
 					break
@@ -540,6 +552,15 @@ def print_nice(matchups):
 		print('----------------------------------------------------------')
 		print(matchup)
 
+def time_string(type):
+	import datetime
+
+	now = datetime.datetime.now()
+	if type == 'day':
+		return now.strftime("%m-%d-%Y")
+	if type == 'time':
+		return now.strftime("%H:%M:%S")
+
 def generate_html_file_matchups(matchups, file_name):
 	from yattag import Doc
 	from yattag import indent
@@ -549,10 +570,11 @@ def generate_html_file_matchups(matchups, file_name):
 	doc.asis('<!DOCTYPE html>')
 	with tag('html'):
 		with tag('body'):
-			with tag('h1'):
-				text('Lines')
+			line('p', time_string('day'))
+			line('p', time_string('time'))
+			line('h1', 'Lines')
 			with tag('head'):
-				doc.stag('link', rel='stylesheet', href='style.css')
+				doc.stag('link', rel='stylesheet', href="{{url_for('static',filename='style.css') }}")
 			for matchup in matchups:
 				with tag('table'):
 					with tag('tr'):
@@ -584,10 +606,11 @@ def generate_html_file_with_deviants(average_matchups, deviant_spreads, deviant_
 	doc.asis('<!DOCTYPE html>')
 	with tag('html'):
 		with tag('body'):
-			with tag('h1'):
-				text('Lines and largest deviants')
+			line('p', time_string('day'))
+			line('p', time_string('time'))
+			line('h1', 'Lines and largest deviants')
 			with tag('head'):
-				doc.stag('link', rel='stylesheet', href='style.css')
+				doc.stag('link', rel='stylesheet', href="{{url_for('static',filename='style.css') }}")
 			for i, matchup in enumerate(average_matchups):
 				deviant_spread = deviant_spreads[i]
 				deviant_mline = deviant_mlines[i]
