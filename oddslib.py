@@ -45,6 +45,7 @@ NAME_TABLE_NFL = {
 		'INDIANAPOLIS':	'Indianapolis Colts',
 		'LA':	'LA Rams',
 		'LA RAMS':	'LA Rams',
+		'LAR': 'LA Rams',
 		'LAC':	'LA Chargers',
 		'LA CHARGERS':	'LA Chargers',
 		'Los Angeles Rams':	'LA Rams',
@@ -100,6 +101,13 @@ WEBSITES['betlucky']['nfl'] = 'http://betluckys.ag/sports?curOption=FOOTBALL/*/N
 
 WEBSITES['gtbets']['nfl'] = 'https://www.gtbets.eu/wagering1.asp?mode=lines&league=NFL&lg=1'
 WEBSITES['gtbets']['ncaaf'] = 'https://www.gtbets.eu/wagering1.asp?mode=lines&league=CF&lg=1'
+
+COLORS = {
+	'red': '\033[0;31m',
+	'green': '\033[0;32m',
+	'yellow': '\033[0;33m',
+	'cyan': '\033[0;36m',
+}
 
 class Line(object):
 	def __init__(self, kind, value, odds=''):
@@ -222,7 +230,10 @@ class Matchup(object):
 
 	def get_key(self):
 		ls = sorted([self.team_one, self.team_two], key=lambda s: str.lower(s))
-		key = ls[0][:3] + ls[1][3]
+		try:
+			key = ls[0][:3] + ls[1][:3]
+		except IndexError as ie:
+			raise ie
 
 		return key
 
@@ -233,6 +244,15 @@ def sign(num):
 	if num < 0:
 		return -1
 	return 1
+
+def add_color(string, color):
+	if color not in COLORS.keys():
+		raise Exception("Invalid color")
+
+	color_code = COLORS[color]
+	no_color = '\033[0m'
+
+	return color_code + string + no_color
 
 def add_spreads(spread_one, spread_two, decimal):
 	

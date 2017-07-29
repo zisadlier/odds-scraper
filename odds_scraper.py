@@ -1,5 +1,8 @@
 import requests
 import time
+import copy
+import json
+
 from oddslib import *
 from params import *
 
@@ -115,6 +118,7 @@ def make_soup_gtbets(url, parse_type):
 
 # Parse lines from a page on sportsbook.ag 
 def get_matchups_sportsbook(url, parse_type, sport):
+	print(add_color("Scraping lines from sportsbook.ag...", 'cyan'))
 	soup = make_soup_basic(url, parse_type)
 
 	elements = soup.find_all("div", id="_")
@@ -168,6 +172,7 @@ def get_matchups_sportsbook(url, parse_type, sport):
 
 # Parse lines from a page on betus.com.pa
 def get_matchups_betus(url, parse_type, sport):
+	print(add_color("Scraping lines from betus.com.pa...", 'cyan'))
 	soup = make_soup_basic(url, parse_type)
 
 	elements = soup.find_all("div", class_="show-pr")
@@ -226,6 +231,7 @@ def get_matchups_betus(url, parse_type, sport):
 
 # Parse lines from a page on bovada.lv
 def get_matchups_bovada(url, parse_type, sport):		
+	print(add_color("Scraping lines from bovada.lv...", 'cyan'))
 	soup = make_soup_bovada(url, parse_type)
 
 	elements = soup.find_all("section", class_="gameline-grid")
@@ -268,6 +274,8 @@ def get_matchups_bovada(url, parse_type, sport):
 	return matchups
 
 def get_matchups_sportsbetting(url, parse_type, sport):
+	print(add_color("Scraping lines from sportsbetting.ag...", 'cyan'))
+
 	soup = make_soup_sportsbetting(url, parse_type, sport)
 
 	elements = soup.find_all('tbody', class_='event')
@@ -307,6 +315,8 @@ def get_matchups_sportsbetting(url, parse_type, sport):
 	return matchups
 
 def get_matchups_betlucky(url, parse_type, sport):
+	print(add_color("Scraping lines from betluckys.ag...", 'cyan'))
+
 	soup = make_soup_basic(url, parse_type)
 
 	elements = soup.find_all('tr')
@@ -363,6 +373,8 @@ def get_matchups_betlucky(url, parse_type, sport):
 	return matchups
 
 def get_matchups_gtbets(url, parse_type, sport):	
+	print(add_color("Scraping lines from gtbets.eu...", 'cyan'))
+
 	soup = make_soup_gtbets(url, parse_type)
 
 	elements = soup.find_all('tbody', class_='wagering-events')
@@ -516,7 +528,7 @@ def find_largest_deviants(average_matchups, matchup_lists, metric):
 						largest_deviants[i].add_website(matchup.website)
 
 					if dev > largest_dev:
-						largest_deviants[i] = matchup
+						largest_deviants[i] = copy.deepcopy(matchup)
 						largest_dev = dev
 
 					break
@@ -540,6 +552,81 @@ def print_nice(matchups):
 		print('----------------------------------------------------------')
 		print(matchup)
 
+def json_dump(matchups_list, fname):
+	site_dict = {}
+	site_dict['date'] = time_string('day')
+
+	for matchups in matchups_list:
+		matchups_dict = {}
+		site_dict[matchups[0].website] = matchups_dict
+		for matchup in matchups:
+			di = {}
+
+			di['sport']  = matchup.sport
+			di['website'] = matchup.website
+			di['team one'] = matchup.team_one
+			di['team two'] = matchup.team_two
+			di['spread one'] = matchup.spread_one.get_string()
+			di['spread two'] = matchup.spread_two.get_string()
+			di['mline one'] = matchup.mline_one.get_string()
+			di['mline two'] = matchup.mline_two.get_string()
+			di['over'] = matchup.over.get_string()
+			di['under'] = matchup.over.get_string()
+
+			matchups_dict[matchup.get_key()] = di
+
+	with open(fname, 'w') as f:
+		json.dump(site_dict, f)
+
+def json_load(fname):
+	matchups_list = []
+	site_dict = {}
+
+	with open(fname, 'r') as f:
+		site_dict = json.load(f)
+
+	matchups_list.append(site_dict['date'])
+
+	for site in site_dict.keys():
+		if site == 'date':
+				continue
+
+		matchups_dict = site_dict[site]
+		matchups = []
+		for key in matchups_dict.keys():
+
+			di = matchups_dict[key]
+
+			sport = di['sport']
+			website = di['website']
+			t1 = di['team one']
+			t2 = di['team two']
+			s1 = di['spread one']
+			s2 = di['spread two']
+			m1 = di['mline one']
+			m2 = di['mline two']
+			o = di['over']
+			u = di['under']
+
+			matchup = Matchup(sport, website, team_one=t1, team_two=t2, spread_one=s1, spread_two=s2,
+	        		      mline_one=m1, mline_two=m2, over=o, under=u)
+
+			matchups.append(matchup)
+
+		matchups_list.append(matchups)
+
+	return matchups_list
+
+
+def time_string(kind):
+	import datetime
+
+	now = datetime.datetime.now()
+	if kind == 'day':
+		return now.strftime("%m-%d-%Y")
+	if kind == 'time':
+		return now.strftime("%H:%M:%S")
+
 def generate_html_file_matchups(matchups, file_name):
 	from yattag import Doc
 	from yattag import indent
@@ -549,8 +636,9 @@ def generate_html_file_matchups(matchups, file_name):
 	doc.asis('<!DOCTYPE html>')
 	with tag('html'):
 		with tag('body'):
-			with tag('h1'):
-				text('Lines')
+			line('p', time_string('day'))
+			line('p', time_string('time'))
+			line('h1', 'Lines')
 			with tag('head'):
 				doc.stag('link', rel='stylesheet', href='style.css')
 			for matchup in matchups:
@@ -584,8 +672,9 @@ def generate_html_file_with_deviants(average_matchups, deviant_spreads, deviant_
 	doc.asis('<!DOCTYPE html>')
 	with tag('html'):
 		with tag('body'):
-			with tag('h1'):
-				text('Lines and largest deviants')
+			line('p', time_string('day'))
+			line('p', time_string('time'))
+			line('h1', 'Lines and largest deviants')
 			with tag('head'):
 				doc.stag('link', rel='stylesheet', href='style.css')
 			for i, matchup in enumerate(average_matchups):
@@ -631,3 +720,9 @@ def generate_html_file_with_deviants(average_matchups, deviant_spreads, deviant_
 
 	file = open(file_name, 'w')
 	file.write(indent(doc.getvalue()))
+
+"""
+m = [scrape('betus', 'nfl')]
+json_dump(m, 'test.json')
+mm = json_load('test.json')
+"""

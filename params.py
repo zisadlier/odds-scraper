@@ -1,2 +1,3 @@
-version = '1.1.0'
-chrome_path = 'C:/Python27/MyStuff/chromedriver.exe' #Set this to wherever chromedriver.exe is located
+__version__ = '1.1.0'
+__author__ = 'zsadlier'
+chrome_path = 'C:/Program Files (x86)/Google/Chrome/chromedriver.exe' #Set this to wherever chromedriver.exe is located
